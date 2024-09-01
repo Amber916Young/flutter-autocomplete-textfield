@@ -34,6 +34,31 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
     _controller.setTriggerCharsPattern(regExp);
     _controller.setTags(tags);
   }
+  String get _formattedText {
+    String controllerText =_controller.text;
+
+    if (controllerText.isEmpty) return "";
+
+    final splitText = controllerText.split(" ");
+
+    List<String> result = [];
+    int length = splitText.length;
+
+    for (int i = 0; i < length; i++) {
+      final text = splitText[i];
+
+      if (text.contains(_triggerCharactersPattern)) {
+        final parsedText = tags[text]??"";
+        result.add(parsedText);
+      } else {
+        result.add(text);
+      }
+    }
+
+    final resultString = result.join(" ");
+
+    return resultString;
+  }
 
   void _tagListener() {
     int cursorPosition = _controller.selection.baseOffset;
@@ -42,23 +67,24 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
       String lastCharacter = _controller.text.substring(cursorPosition - 1, cursorPosition);
       print('Last character before cursor: $lastCharacter');
     }
-
-    if (_backtrackAndSearch()) {
-      print('Re-entered search context due to backtracking.');
-      return; // Exit if backtracking triggers a search
-    }
+    //
+    // if (_backtrackAndSearch()) {
+    //   print('Re-entered search context due to backtracking.');
+    //   return; // Exit if backtracking triggers a search
+    // }
     String text = _controller.text;
     final position = cursorPosition - 1;
+    _controller.setFormattedText(_formattedText);
 
-    String query = _extractValidQuery(text, position);
-    print("query $query");
     if (position >= 0) {
+      String query = _extractValidQuery(text, position);
+      print("query $query");
       if (query.isNotEmpty) {
         _updatePredictions(query);
       } else {
         _shouldSearch = false;
         setState(() {
-          x _predictions = [];
+           _predictions = [];
         });
       }
     }
@@ -125,8 +151,6 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
   }
 
   void _updatePredictions(String query) {
-    // Update the predictions list based on the query
-    // Mock logic: Here you would call your search API or logic to get the predictions
     setState(() {
       if (_currentTriggerChar == '#') {
         _predictions = ['key1', 'key2', 'key3'];
@@ -196,7 +220,6 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
         startIndex + matchedText.length,
         displayText,
       );
-
       _controller.value = TextEditingValue(
         text: newDisplayText,
         selection: TextSelection.collapsed(offset: newDisplayText.length),

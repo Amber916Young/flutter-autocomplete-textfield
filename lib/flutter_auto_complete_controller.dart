@@ -4,11 +4,15 @@ class FlutterAutoCompleteController extends TextEditingController {
   FlutterAutoCompleteController({String? text}) : super(text: text);
   late Map<String, TextStyle> _tagStyles;
   late Map<String, String> _tags;
+  late String _formattedText;
 
-  String get formattedText => text;
+  String get formattedText => _formattedText;
 
   RegExp? _triggerCharsPattern;
 
+  void setFormattedText(String formattedText) {
+    _formattedText = formattedText;
+  }
   void setTagStyles(Map<String, TextStyle> tagStyles) {
     _tagStyles = tagStyles;
   }
