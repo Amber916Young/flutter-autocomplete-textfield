@@ -22,7 +22,8 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
   final RegExp regExp = RegExp(r'^[\p{L}\p{N}-]*$', unicode: true);
   List<String> _predictions = []; // List to store predictions
   Map<String, String> tags = {};
-  final RegExp _triggerCharactersPattern = RegExp(r'[@#]');
+  final RegExp _triggerCharactersPattern = RegExp(r'[#@]');
+
   Set<String> triggerCharacters = {'@', '#'};
   String? _lastCachedText;
 
@@ -34,104 +35,180 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
     _controller.setTriggerCharsPattern(regExp);
     _controller.setTags(tags);
   }
+  // String get _formattedText {
+  //   String controllerText =_controller.text;
+  //
+  //   if (controllerText.isEmpty) return "";
+  //
+  //   final splitText = controllerText.split(" ");
+  //
+  //   List<String> result = [];
+  //   int length = splitText.length;
+  //
+  //   for (int i = 0; i < length; i++) {
+  //     final text = splitText[i];
+  //
+  //     if (text.contains(_triggerCharactersPattern)) {
+  //       final parsedText = tags[text]??"";
+  //       result.add(parsedText);
+  //     } else {
+  //       result.add(text);
+  //     }
+  //   }
+  //
+  //   final resultString = result.join(" ");
+  //
+  //   return resultString;
+  // }
+
+
   String get _formattedText {
-    String controllerText =_controller.text;
-
+    String controllerText = _controller.text;
     if (controllerText.isEmpty) return "";
-
-    final splitText = controllerText.split(" ");
-
     List<String> result = [];
-    int length = splitText.length;
+    int length = controllerText.length;
+    int startIndex = 0;
 
-    for (int i = 0; i < length; i++) {
-      final text = splitText[i];
+    while (startIndex < length) {
+      final char = controllerText[startIndex];
+      if (_triggerCharactersPattern.hasMatch(char)) {
+        int endIndex = startIndex + 1;
+        // Continue until you hit a space or another trigger character
+        while (endIndex < length && !_triggerCharactersPattern.hasMatch(controllerText[endIndex]) && controllerText[endIndex] != ' ') {
+          endIndex++;
+        }
 
-      if (text.contains(_triggerCharactersPattern)) {
-        final parsedText = tags[text]??"";
+        final tagOrMention = controllerText.substring(startIndex, endIndex);
+        final parsedText = tags[tagOrMention] ?? tagOrMention;
         result.add(parsedText);
+
+        startIndex = endIndex;
       } else {
-        result.add(text);
+        result.add(char);
+        startIndex++;
       }
     }
-
-    final resultString = result.join(" ");
-
-    return resultString;
+    return result.join("");
   }
 
   void _tagListener() {
     int cursorPosition = _controller.selection.baseOffset;
-    print('Cursor position: $cursorPosition');
-    if (cursorPosition > 0 && cursorPosition <= _controller.text.length) {
-      String lastCharacter = _controller.text.substring(cursorPosition - 1, cursorPosition);
-      print('Last character before cursor: $lastCharacter');
-    }
     //
-    // if (_backtrackAndSearch()) {
-    //   print('Re-entered search context due to backtracking.');
-    //   return; // Exit if backtracking triggers a search
-    // }
+    _onCursorMove();
+
     String text = _controller.text;
     final position = cursorPosition - 1;
     _controller.setFormattedText(_formattedText);
-
-    if (position >= 0) {
-      String query = _extractValidQuery(text, position);
-      print("query $query");
-      if (query.isNotEmpty) {
-        _updatePredictions(query);
-      } else {
-        _shouldSearch = false;
-        setState(() {
-           _predictions = [];
-        });
-      }
-    }
+    print('$_shouldSearch $cursorPosition $_formattedText');
     // Activate search context if a trigger character is found
-    if (position >= 0 && ['#', '@'].contains(text[position])) {
-      _currentTriggerChar = text[position];
-      _shouldSearch = true;
-    }
-  }
+    // if (position >= 0 && _triggerCharactersPattern.hasMatch(text[position])) {
+    //   _currentTriggerChar = text[position];
+    //   _shouldSearch = true;
+    // }
 
-  bool _backtrackAndSearch() {
-    String text = _controller.text;
-    if (!text.contains(_triggerCharactersPattern)) return false;
 
-    _lastCachedText = text;
-    final length = _controller.selection.baseOffset - 1;
-
-    for (int i = length; i >= 0; i--) {
-      if ((i == length && triggerCharacters.contains(text[i])) ||
-          !triggerCharacters.contains(text[i]) && !regExp.hasMatch(text[i])) {
-        return false;
-      }
-
-      if (triggerCharacters.contains(text[i])) {
-        final doesTagExistInRange = tags.keys.any(
-          (tag) => text.indexOf(tag, i) == i && text.indexOf(tag, i) + tag.length == length + 1,
-        );
-
-        if (doesTagExistInRange) return false;
-
-        _currentTriggerChar = text[i];
-        _shouldSearch = true;
-        if (text.isNotEmpty) {
-          _extractAndSearch(text, length);
+    if(_shouldSearch){
+      if (position >= 0) {
+        String query = _extractValidQuery(text, position);
+        print("query $query");
+        if (query.isNotEmpty) {
+          _updatePredictions(query);
+        } else {
+          _shouldSearch = false;
+          setState(() {
+            _predictions = [];
+          });
         }
-
-        return true;
       }
     }
 
-    return false;
+
   }
 
-  void _extractAndSearch(String text, int length) {
-    // Here you would implement the logic for what should happen when the search context is re-entered.
-    print('Extracting and searching for: ${text.substring(length)}');
+  int? previousCursorPosition; // Track the previous cursor position
+
+  void _onCursorMove() {
+    _shouldSearch = false;
+
+    String controllerText = _controller.text;
+    TextEditingController controller = _controller;
+
+    // Get the current cursor position
+    int cursorPosition = controller.selection.baseOffset;
+
+    // Return if the text is empty
+    if (controllerText.isEmpty) {
+      return;
+    }
+
+    // Determine if the cursor has moved back
+    if (previousCursorPosition != null && cursorPosition < previousCursorPosition!) {
+      // Handle backward movement
+      _handleCursorMoveBack(controllerText, cursorPosition);
+    } else if (previousCursorPosition != null && cursorPosition > previousCursorPosition!) {
+      // Handle forward movement
+      _handleCursorMoveForward(controllerText, cursorPosition);
+    }
+
+    // Update the previous cursor position for future checks
+    previousCursorPosition = cursorPosition;
   }
+
+  void _handleCursorMoveBack(String text, int cursorPosition) {
+    int startIndex = cursorPosition - 1;
+
+    // Identify the start of the tag (search backwards)
+    while (startIndex > 0 && text[startIndex] != ' ' &&
+              !_triggerCharactersPattern.hasMatch(text[startIndex])) {
+            startIndex--;
+          }
+
+    // If the cursor is inside a tag (i.e., after the '#' and before a space or end of tag)
+    if (startIndex > 0 && _triggerCharactersPattern.hasMatch(text[startIndex])) {
+      _shouldSearch = true; // Set search flag to true
+    }
+  }
+
+  void _handleCursorMoveForward(String text, int cursorPosition) {
+    // Start from the current cursor position and find the start of the tag
+    int startIndex = cursorPosition - 1;
+
+    // Find the start of the tag by moving backward
+    while (startIndex > 0 && text[startIndex] != ' ' &&
+        !_triggerCharactersPattern.hasMatch(text[startIndex])) {
+      startIndex--;
+    }
+
+    // Adjust the startIndex to include the trigger character if it's a trigger character
+    if (startIndex > 0 && _triggerCharactersPattern.hasMatch(text[startIndex])) {
+      startIndex--;
+    }
+
+    // Check if the position is inside a tag
+    // Tag is considered valid if it starts with a trigger character and ends with a non-space
+    if (startIndex >= 0 && _triggerCharactersPattern.hasMatch(text[startIndex])) {
+      // Now, identify the end of the tag (the end of tag is at the next space or end of text)
+      int endIndex = cursorPosition;
+      while (endIndex < text.length && text[endIndex] != ' ') {
+        endIndex++;
+      }
+
+      // Extract the tag content
+      String query = text.substring(startIndex + 1, endIndex).trim();
+
+      // Trigger the search function if the query is not empty
+      if (query.isNotEmpty && query != text.substring(startIndex + 1, cursorPosition)) {
+        _triggerSearch(query);
+      }
+    }
+  }
+
+  void _triggerSearch(String query) {
+    // Implement your search logic here
+    _shouldSearch = true;
+    print("Search triggered with query: $query");
+  }
+
 
   String _extractValidQuery(String text, int endOffset) {
     int index = text.lastIndexOf(_currentTriggerChar, endOffset);
