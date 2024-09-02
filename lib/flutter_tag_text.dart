@@ -3,8 +3,8 @@ import 'package:tagtrigger/custom_text_field.dart';
 import 'package:tagtrigger/flutter_auto_complete_controller.dart';
 
 Map<String, TextStyle> tagStyles = {
-  "@": TextStyle(color: Colors.pinkAccent),
-  "#": TextStyle(color: Colors.blueAccent),
+  "@": const TextStyle(color: Colors.pinkAccent),
+  "#": const TextStyle(color: Colors.blueAccent),
 };
 
 class FlutterTagTextField extends StatefulWidget {
@@ -19,12 +19,10 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
   final FocusNode _contextFocus = FocusNode();
   String _currentTriggerChar = '';
   bool _shouldSearch = false;
-
   final RegExp triggerRegExp = RegExp(r'^[\p{L}\p{N}-]*$', unicode: true);
-  List<String> _predictions = []; // List to store predictions
+  List<String> _predictions = [];
   Map<String, String> tags = {};
   final RegExp _triggerCharactersPattern = RegExp(r'[#@]');
-
   Set<String> triggerCharacters = {'@', '#'};
 
   @override
