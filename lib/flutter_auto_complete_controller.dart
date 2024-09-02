@@ -13,6 +13,7 @@ class FlutterAutoCompleteController extends TextEditingController {
   void setFormattedText(String formattedText) {
     _formattedText = formattedText;
   }
+
   void setTagStyles(Map<String, TextStyle> tagStyles) {
     _tagStyles = tagStyles;
   }
@@ -39,22 +40,37 @@ class FlutterAutoCompleteController extends TextEditingController {
   TextSpan _buildTextSpan(TextStyle? style) {
     if (text.isEmpty) return const TextSpan();
 
-    final splitText = text.split(" ");
     List<TextSpan> spans = [];
     int start = 0;
 
-    for (int i = 0; i < splitText.length; i++) {
-      final currentText = splitText[i];
-      final triggerChar = currentText.isNotEmpty && _tagStyles.containsKey(currentText[0]) ? currentText[0] : null;
-
-      if (triggerChar != null) {
-        final styledText = _getStyledTag(currentText);
-        spans.add(styledText);
+    while (start < text.length) {
+      // Identify the start of a tag
+      if (_tagStyles.containsKey(text[start])) {
+        int end = start + 1;
+        // Find the end of the tag (non-space character sequence)
+        while (end < text.length && text[end] != ' ' && !_tagStyles.containsKey(text[end])) {
+          end++;
+        }
+        // Extract the tag and apply the appropriate style
+        final tag = text.substring(start, end);
+        spans.add(_getStyledTag(tag));
+        start = end; // Move start to the end of the tag
       } else {
-        spans.add(TextSpan(text: currentText, style: style));
+        // Find the next space or trigger character
+        int end = start;
+        while (end < text.length && text[end] != ' ' && !_tagStyles.containsKey(text[end])) {
+          end++;
+        }
+        // Add the non-tag text
+        spans.add(TextSpan(text: text.substring(start, end), style: style));
+        start = end; // Move start to the end of the word or space
       }
 
-      spans.add(const TextSpan(text: " "));
+      // Add a space if we're not at the end of the text
+      if (start < text.length && text[start] == ' ') {
+        spans.add(const TextSpan(text: " "));
+        start++;
+      }
     }
 
     return TextSpan(children: spans, style: style);
@@ -62,17 +78,16 @@ class FlutterAutoCompleteController extends TextEditingController {
 
   TextSpan _getStyledTag(String word) {
     String triggerChar = word[0];
-    String tagWithoutTrigger = word.substring(1);
 
-    // Check if the tag is in the _tags Map
+    // Apply style based on the trigger character
     if (_tags.containsKey(word)) {
       return TextSpan(
         text: word,
         style: _tagStyles[triggerChar],
       );
     } else {
-      // If the tag is not found, return it as normal text
-      return TextSpan(text: word);
+      // If the tag is not found, return it as normal text with default style
+      return TextSpan(text: word, style: _tagStyles[triggerChar] ?? TextStyle());
     }
   }
 }

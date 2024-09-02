@@ -19,48 +19,22 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
   final FocusNode _contextFocus = FocusNode();
   String _currentTriggerChar = '';
   bool _shouldSearch = false;
-  final RegExp regExp = RegExp(r'^[\p{L}\p{N}-]*$', unicode: true);
+
+  final RegExp triggerRegExp = RegExp(r'^[\p{L}\p{N}-]*$', unicode: true);
   List<String> _predictions = []; // List to store predictions
   Map<String, String> tags = {};
   final RegExp _triggerCharactersPattern = RegExp(r'[#@]');
 
   Set<String> triggerCharacters = {'@', '#'};
-  String? _lastCachedText;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_tagListener);
     _controller.setTagStyles(tagStyles);
-    _controller.setTriggerCharsPattern(regExp);
+    _controller.setTriggerCharsPattern(triggerRegExp);
     _controller.setTags(tags);
   }
-  // String get _formattedText {
-  //   String controllerText =_controller.text;
-  //
-  //   if (controllerText.isEmpty) return "";
-  //
-  //   final splitText = controllerText.split(" ");
-  //
-  //   List<String> result = [];
-  //   int length = splitText.length;
-  //
-  //   for (int i = 0; i < length; i++) {
-  //     final text = splitText[i];
-  //
-  //     if (text.contains(_triggerCharactersPattern)) {
-  //       final parsedText = tags[text]??"";
-  //       result.add(parsedText);
-  //     } else {
-  //       result.add(text);
-  //     }
-  //   }
-  //
-  //   final resultString = result.join(" ");
-  //
-  //   return resultString;
-  // }
-
 
   String get _formattedText {
     String controllerText = _controller.text;
@@ -74,7 +48,9 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
       if (_triggerCharactersPattern.hasMatch(char)) {
         int endIndex = startIndex + 1;
         // Continue until you hit a space or another trigger character
-        while (endIndex < length && !_triggerCharactersPattern.hasMatch(controllerText[endIndex]) && controllerText[endIndex] != ' ') {
+        while (endIndex < length &&
+            !_triggerCharactersPattern.hasMatch(controllerText[endIndex]) &&
+            controllerText[endIndex] != ' ') {
           endIndex++;
         }
 
@@ -92,37 +68,15 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
   }
 
   void _tagListener() {
-    int cursorPosition = _controller.selection.baseOffset;
-    //
     _onCursorMove();
-
-    String text = _controller.text;
-    final position = cursorPosition - 1;
+    int cursorPosition = _controller.selection.baseOffset;
     _controller.setFormattedText(_formattedText);
     print('$_shouldSearch $cursorPosition $_formattedText');
-    // Activate search context if a trigger character is found
-    // if (position >= 0 && _triggerCharactersPattern.hasMatch(text[position])) {
-    //   _currentTriggerChar = text[position];
-    //   _shouldSearch = true;
-    // }
-
-
-    if(_shouldSearch){
-      if (position >= 0) {
-        String query = _extractValidQuery(text, position);
-        print("query $query");
-        if (query.isNotEmpty) {
-          _updatePredictions(query);
-        } else {
-          _shouldSearch = false;
-          setState(() {
-            _predictions = [];
-          });
-        }
-      }
+    if (!_shouldSearch) {
+      setState(() {
+        _predictions = [];
+      });
     }
-
-
   }
 
   int? previousCursorPosition; // Track the previous cursor position
@@ -142,12 +96,14 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
     }
 
     // Determine if the cursor has moved back
-    if (previousCursorPosition != null && cursorPosition < previousCursorPosition!) {
-      // Handle backward movement
-      _handleCursorMoveBack(controllerText, cursorPosition);
-    } else if (previousCursorPosition != null && cursorPosition > previousCursorPosition!) {
-      // Handle forward movement
-      _handleCursorMoveForward(controllerText, cursorPosition);
+    if (previousCursorPosition != null) {
+      if (cursorPosition < previousCursorPosition!) {
+        // Handle backward movement
+        _handleCursorMoveBack(controllerText, cursorPosition);
+      } else if (cursorPosition > previousCursorPosition!) {
+        // Handle forward movement
+        _handleCursorMoveForward(controllerText, cursorPosition);
+      }
     }
 
     // Update the previous cursor position for future checks
@@ -158,14 +114,29 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
     int startIndex = cursorPosition - 1;
 
     // Identify the start of the tag (search backwards)
-    while (startIndex > 0 && text[startIndex] != ' ' &&
-              !_triggerCharactersPattern.hasMatch(text[startIndex])) {
-            startIndex--;
-          }
+    while (startIndex > 0 && text[startIndex] != ' ' && !_triggerCharactersPattern.hasMatch(text[startIndex])) {
+      startIndex--;
+    }
 
     // If the cursor is inside a tag (i.e., after the '#' and before a space or end of tag)
     if (startIndex > 0 && _triggerCharactersPattern.hasMatch(text[startIndex])) {
-      _shouldSearch = true; // Set search flag to true
+      _shouldSearch = true;
+      _currentTriggerChar = text[startIndex];
+      int endIndex = cursorPosition;
+      while (endIndex < text.length && text[endIndex] != ' ') {
+        endIndex++;
+      }
+      String query = text.substring(startIndex + 1, endIndex).trim();
+      print("_handleCursorMoveBack query   $query");
+      if (query.isNotEmpty && cursorPosition > startIndex + 1 && triggerRegExp.hasMatch(query)) {
+        _shouldSearch = true;
+        _updatePredictions(query);
+      } else {
+        _shouldSearch = false;
+        setState(() {
+          _predictions = [];
+        });
+      }
     }
   }
 
@@ -174,50 +145,33 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
     int startIndex = cursorPosition - 1;
 
     // Find the start of the tag by moving backward
-    while (startIndex > 0 && text[startIndex] != ' ' &&
-        !_triggerCharactersPattern.hasMatch(text[startIndex])) {
-      startIndex--;
-    }
-
-    // Adjust the startIndex to include the trigger character if it's a trigger character
-    if (startIndex > 0 && _triggerCharactersPattern.hasMatch(text[startIndex])) {
+    while (startIndex > 0 && text[startIndex] != ' ' && !_triggerCharactersPattern.hasMatch(text[startIndex])) {
       startIndex--;
     }
 
     // Check if the position is inside a tag
     // Tag is considered valid if it starts with a trigger character and ends with a non-space
     if (startIndex >= 0 && _triggerCharactersPattern.hasMatch(text[startIndex])) {
-      // Now, identify the end of the tag (the end of tag is at the next space or end of text)
+      _currentTriggerChar = text[startIndex];
       int endIndex = cursorPosition;
       while (endIndex < text.length && text[endIndex] != ' ') {
         endIndex++;
       }
-
       // Extract the tag content
       String query = text.substring(startIndex + 1, endIndex).trim();
-
-      // Trigger the search function if the query is not empty
-      if (query.isNotEmpty && query != text.substring(startIndex + 1, cursorPosition)) {
-        _triggerSearch(query);
+      print("_handleCursorMoveForward query   $query");
+      if (query.isNotEmpty && cursorPosition > startIndex + 1 && triggerRegExp.hasMatch(query)) {
+        _shouldSearch = true;
+        if (query.isNotEmpty) {
+          _updatePredictions(query);
+        } else {
+          _shouldSearch = false;
+          setState(() {
+            _predictions = [];
+          });
+        }
       }
     }
-  }
-
-  void _triggerSearch(String query) {
-    // Implement your search logic here
-    _shouldSearch = true;
-    print("Search triggered with query: $query");
-  }
-
-
-  String _extractValidQuery(String text, int endOffset) {
-    int index = text.lastIndexOf(_currentTriggerChar, endOffset);
-    if (index < 0) return '';
-    final query = text.substring(index + 1, endOffset + 1).trim();
-    if (query.contains(' ') || !regExp.hasMatch(query)) {
-      return '';
-    }
-    return query;
   }
 
   void _onPredictionSelected(String selectedPrediction) {
@@ -252,8 +206,7 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
         setState(() {
           _replaceMatchedText(text.substring(index, endOffset + 1), replacementText, displayText);
         });
-        _shouldSearch = false; // Stop search after replacement
-        _predictions = []; // Clear predictions
+        _shouldSearch = false;
         return true;
       }
     } catch (e) {
@@ -263,19 +216,10 @@ class _FlutterTagTextFieldState extends State<FlutterTagTextField> {
   }
 
   String _getRealValue(String query) {
-    // Mock logic: return a "real value" based on the query
-    // Replace this with your actual logic to fetch the real value
-    if (_currentTriggerChar == '#') {
-      return 'realvalue';
-    } else if (_currentTriggerChar == '@') {
-      return 'kate';
-    }
     return query;
   }
 
   String _getIdForValue(String realValue) {
-    // Mock logic: return an "id" based on the real value
-    // Replace this with your actual logic to fetch the id
     return '123';
   }
 
